@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#b3261e">
+<title>Próximos trenes Belgrano Norte</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<style>
+:root{
+  --bg:#f6f4f1; --card:#ffffff; --ink:#1c1b1a; --muted:#6b6661; --line:#e4dfd9;
+  --brand:#b3261e; --brand-ink:#ffffff; --soft:#f9e9e7; --ok:#1d6b3a; --warn:#8a5a00; --warn-bg:#fff4d6;
+}
+@media (prefers-color-scheme: dark){
+  :root{ --bg:#141312; --card:#1f1d1c; --ink:#f1ede8; --muted:#a39c95; --line:#34302d;
+    --brand:#e5645b; --brand-ink:#1a0806; --soft:#3a1c19; --ok:#7fd49b; --warn:#f2c462; --warn-bg:#3a2e10; }
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:16px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  -webkit-tap-highlight-color:transparent}
+main{max-width:560px;margin:0 auto;padding:14px 14px 40px}
+header.top{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin:2px 2px 10px}
+header.top h1{font-size:15px;font-weight:700;margin:0;letter-spacing:.02em;text-transform:uppercase;color:var(--brand)}
+#clock{font-variant-numeric:tabular-nums;font-weight:600;color:var(--muted);font-size:15px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px}
+.station .label{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.station h2{font-size:28px;line-height:1.1;margin:2px 0 6px;font-weight:800}
+.station .sub{font-size:14px;color:var(--muted);min-height:20px}
+.badge{display:inline-block;font-size:12px;font-weight:700;padding:2px 8px;border-radius:999px;background:var(--soft);color:var(--brand);margin-right:6px;vertical-align:1px}
+.actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}
+button{font:inherit;color:inherit;cursor:pointer}
+.btn{min-height:48px;border-radius:12px;border:1px solid var(--line);background:var(--bg);font-weight:650;padding:8px 10px}
+.btn[aria-pressed="true"]{background:var(--brand);color:var(--brand-ink);border-color:var(--brand)}
+.near{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.chip{border:1px solid var(--line);background:transparent;border-radius:999px;padding:6px 10px;font-size:13px;min-height:34px}
+.notice{margin-top:10px;padding:9px 11px;border-radius:10px;background:var(--warn-bg);color:var(--warn);font-size:13.5px}
+.daytype{margin:14px 4px 4px;font-size:13.5px;color:var(--muted)}
+.daytype b{color:var(--ink)}
+section.dir{margin-top:10px}
+section.dir h3{font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:14px 4px 6px;font-weight:700}
+ul.deps{list-style:none;margin:0;padding:0}
+ul.deps li{display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center;padding:11px 2px;border-top:1px solid var(--line)}
+ul.deps li:first-child{border-top:0}
+.time{font-size:24px;font-weight:800;font-variant-numeric:tabular-nums}
+li.first .time{color:var(--brand)}
+.dest{font-size:14.5px;font-weight:600}
+.meta{font-size:12.5px;color:var(--muted)}
+.eta{font-size:14px;font-weight:700;text-align:right;white-space:nowrap;color:var(--ok)}
+.eta.far{color:var(--muted);font-weight:600}
+.empty{color:var(--muted);font-size:14px;padding:8px 2px}
+.more{width:100%;margin-top:6px;border:0;background:transparent;color:var(--brand);font-weight:650;min-height:40px}
+footer{margin:18px 4px 0;font-size:12px;color:var(--muted)}
+/* selector */
+#sheet{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:flex-end;justify-content:center;z-index:10}
+#sheet.open{display:flex}
+#sheet .panel{background:var(--card);width:100%;max-width:560px;max-height:86vh;border-radius:18px 18px 0 0;display:flex;flex-direction:column}
+#sheet .head{display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border-bottom:1px solid var(--line)}
+#sheet .head strong{font-size:17px}
+#sheet .close{border:0;background:transparent;font-size:15px;font-weight:650;color:var(--brand);min-height:40px}
+#sheet .list{overflow:auto;padding:6px 8px 18px}
+.opt{display:flex;justify-content:space-between;align-items:center;width:100%;text-align:left;border:0;background:transparent;padding:12px 10px;border-radius:10px;min-height:48px;font-size:16px}
+.opt.sel{background:var(--soft);color:var(--brand);font-weight:700}
+.opt small{color:var(--muted);font-size:13px;font-weight:500}
+.opt.auto{font-weight:700;border-bottom:1px solid var(--line);border-radius:10px 10px 0 0;margin-bottom:4px}
+</style>
+</head>
+<body>
+<main>
+  <header class="top"><h1>Belgrano Norte</h1><span id="clock"></span></header>
+
+  <div class="card station">
+    <div class="label" id="modeLabel">Estación</div>
+    <h2 id="stName">...</h2>
+    <div class="sub" id="stSub"></div>
+    <div class="near" id="near"></div>
+    <div class="notice" id="notice" hidden></div>
+    <div class="actions">
+      <button class="btn" id="btnStation" type="button">Cambiar estación</button>
+      <button class="btn" id="btnHoliday" type="button" aria-pressed="false">Hoy es feriado</button>
+    </div>
+  </div>
+
+  <div class="daytype" id="dayType"></div>
+
+  <section class="dir"><h3 id="hIda">Hacia Villa Rosa</h3><div class="card"><ul class="deps" id="listIda"></ul><button class="more" id="moreIda" type="button"></button></div></section>
+  <section class="dir"><h3 id="hVuelta">Hacia Retiro</h3><div class="card"><ul class="deps" id="listVuelta"></ul><button class="more" id="moreVuelta" type="button"></button></div></section>
+
+  <footer id="foot"></footer>
+</main>
+
+<div id="sheet" role="dialog" aria-modal="true" aria-label="Elegir estación">
+  <div class="panel">
+    <div class="head"><strong>Elegir estación</strong><button class="close" id="sheetClose" type="button">Cerrar</button></div>
+    <div class="list" id="sheetList"></div>
+  </div>
+</div>
+
+<script>
+"use strict";
+(async function main(){
+/* Los horarios y las estaciones viven en horarios.json, la única fuente de datos */
+const DATA = await (await fetch("horarios.json")).json();
+const ST = DATA.estaciones, LAST = ST.length - 1, TZ = "America/Argentina/Buenos_Aires";
+const DAY_NAMES = { lav: "Lunes a viernes", sab: "Sábado", dyf: "Domingo o feriado" };
+
+/* === almacenamiento local (puede no estar disponible) === */
+const store = {
+  get(k){ try { return localStorage.getItem(k); } catch(e){ return null; } },
+  set(k,v){ try { v === null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch(e){} }
+};
+
+/* === hora de Buenos Aires === */
+const fmt = new Intl.DateTimeFormat("en-CA", { timeZone: TZ, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", weekday: "short" });
+function nowBA(d){
+  const p = {}; for (const x of fmt.formatToParts(d || new Date())) p[x.type] = x.value;
+  const dow = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].indexOf(p.weekday);
+  return { date: p.year + "-" + p.month + "-" + p.day, dow, minutes: (+p.hour) * 60 + (+p.minute) + (+p.second) / 60, hhmm: p.hour + ":" + p.minute };
+}
+function dayTypeOfDow(dow){ return dow === 0 ? "dyf" : dow === 6 ? "sab" : "lav"; }
+
+/* === preproceso: minutos crecientes por tren (maneja el cruce de medianoche) === */
+for (const day in DATA.servicios) for (const dir in DATA.servicios[day]) for (const t of DATA.servicios[day][dir]) {
+  let prev = -1, add = 0;
+  t.m = t.horarios.map(h => { let v = (+h.slice(0,2)) * 60 + (+h.slice(3)) + add; if (v < prev) { add += 1440; v += 1440; } prev = v; return v; });
+}
+
+/* Próximas salidas desde la estación s en el sentido dir.
+   Considera los trenes de ayer que cruzan la medianoche, los de hoy y los primeros de mañana. */
+function departures(s, dir, now, holidayToday, limit){
+  const pos = dir === "ida" ? s : LAST - s, out = [];
+  for (const off of [-1, 0, 1]) {
+    const dow = (now.dow + off + 7) % 7;
+    const type = (off === 0 && holidayToday) ? "dyf" : dayTypeOfDow(dow);
+    for (const t of DATA.servicios[type][dir]) {
+      const i = pos - t.desde;
+      if (i < 0 || i >= t.m.length - 1) continue;          // no para aquí, o es su terminal
+      const abs = t.m[i] + off * 1440;
+      if (abs < now.minutes - 0.5) continue;
+      const endPos = t.desde + t.m.length - 1;
+      out.push({ abs, hhmm: t.horarios[i], tren: t.tren, dest: ST[dir === "ida" ? endPos : LAST - endPos].nombre,
+                 arr: t.horarios[t.m.length - 1], tomorrow: abs >= 1440 });
+    }
+  }
+  out.sort((a, b) => a.abs - b.abs);
+  return out.slice(0, limit);
+}
+
+/* === geolocalización === */
+function distKm(a, b, c, d){
+  const R = 6371, r = Math.PI / 180, x = (c - a) * r, y = (d - b) * r;
+  const h = Math.sin(x/2) ** 2 + Math.cos(a*r) * Math.cos(c*r) * Math.sin(y/2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+function fmtDist(km){ return km < 1 ? Math.round(km * 1000 / 10) * 10 + " m" : km.toFixed(km < 10 ? 1 : 0).replace(".", ",") + " km"; }
+
+const state = {
+  manual: null,          // id de estación elegida a mano, o null para automático
+  pos: null,             // {lat, lon, acc}
+  geoError: null,
+  locating: false,
+  holidayDate: store.get("bn.feriado"),
+  more: { ida: false, vuelta: false }
+};
+{ const m = store.get("bn.manual"); if (m !== null && ST[+m]) state.manual = +m; }
+const lastAuto = store.get("bn.ultima");
+
+function ranked(){
+  if (!state.pos) return null;
+  return ST.map(e => ({ id: e.id, km: distKm(state.pos.lat, state.pos.lon, e.lat, e.lon) })).sort((a, b) => a.km - b.km);
+}
+function currentStation(){
+  if (state.manual !== null) return state.manual;
+  const r = ranked(); if (r) return r[0].id;
+  if (lastAuto !== null && ST[+lastAuto]) return +lastAuto;
+  return 0;
+}
+function locate(){
+  if (!("geolocation" in navigator)) { state.geoError = "Este navegador no ofrece geolocalización."; render(); return; }
+  state.locating = true; render();
+  try {
+    navigator.geolocation.getCurrentPosition(p => {
+      state.locating = false; state.geoError = null;
+      state.pos = { lat: p.coords.latitude, lon: p.coords.longitude, acc: p.coords.accuracy };
+      const r = ranked(); if (r) store.set("bn.ultima", String(r[0].id));
+      render();
+    }, err => {
+      state.locating = false;
+      state.geoError = err && err.code === 1 ? "No hay permiso para usar la ubicación." : "No se pudo obtener la ubicación.";
+      render();
+    }, { enableHighAccuracy: true, timeout: 12000, maximumAge: 60000 });
+  } catch (e) { state.locating = false; state.geoError = "No se pudo obtener la ubicación."; render(); }
+}
+
+/* === interfaz === */
+const $ = id => document.getElementById(id);
+function el(tag, cls, text){ const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; }
+function etaText(mins){
+  if (mins < 1) return "Ahora";
+  const m = Math.round(mins);
+  if (m < 60) return "en " + m + " min";
+  return "en " + Math.floor(m / 60) + " h " + (m % 60) + " min";
+}
+
+function renderList(dir, s, now, holiday){
+  const ul = $(dir === "ida" ? "listIda" : "listVuelta"), more = $(dir === "ida" ? "moreIda" : "moreVuelta");
+  ul.textContent = "";
+  const terminal = (dir === "ida" && s === LAST) || (dir === "vuelta" && s === 0);
+  if (terminal) { ul.appendChild(el("li", "empty", "Esta estación es la terminal de este sentido.")); more.hidden = true; return; }
+  const n = state.more[dir] ? 15 : 4, deps = departures(s, dir, now, holiday, n);
+  if (!deps.length) { ul.appendChild(el("li", "empty", "No hay más salidas programadas.")); more.hidden = true; return; }
+  deps.forEach((d, k) => {
+    const li = el("li", k === 0 ? "first" : "");
+    li.appendChild(el("div", "time", d.hhmm));
+    const mid = el("div");
+    mid.appendChild(el("div", "dest", "a " + d.dest));
+    mid.appendChild(el("div", "meta", "Tren " + d.tren + " · llega " + d.arr + (d.tomorrow ? " · mañana" : "")));
+    li.appendChild(mid);
+    const mins = d.abs - now.minutes;
+    li.appendChild(el("div", "eta" + (mins >= 60 ? " far" : ""), etaText(mins)));
+    ul.appendChild(li);
+  });
+  more.hidden = false; more.textContent = state.more[dir] ? "Ver menos" : "Ver más salidas";
+}
+
+function render(){
+  const now = nowBA(), s = currentStation(), st = ST[s], r = ranked();
+  const holiday = state.holidayDate === now.date;
+  if (state.holidayDate && !holiday) { state.holidayDate = null; store.set("bn.feriado", null); }   // el feriado vale solo por un día
+
+  $("clock").textContent = now.hhmm;
+  $("stName").textContent = st.nombre;
+  const auto = state.manual === null;
+  $("modeLabel").textContent = auto ? (state.pos ? "Estación más cercana" : "Estación") : "Estación elegida a mano";
+
+  const sub = $("stSub"); sub.textContent = "";
+  sub.appendChild(el("span", "badge", auto ? "GPS" : "Manual"));
+  let txt = "";
+  if (r) { const me = r.find(x => x.id === s); txt = "a " + fmtDist(me.km) + " de tu ubicación"; }
+  else if (state.locating) txt = "Buscando tu ubicación...";
+  else if (auto) txt = "Sin ubicación";
+  sub.appendChild(document.createTextNode(txt));
+
+  const near = $("near"); near.textContent = "";
+  if (r) {
+    r.filter(x => x.id !== s).slice(0, auto ? 2 : 3).forEach(x => {
+      const b = el("button", "chip", ST[x.id].nombre + " · " + fmtDist(x.km)); b.type = "button";
+      b.onclick = () => setManual(x.id); near.appendChild(b);
+    });
+  }
+  const notice = $("notice");
+  if (auto && !state.pos && !state.locating && state.geoError) {
+    notice.hidden = false;
+    notice.textContent = state.geoError + " Se muestra " + st.nombre + ". Elegí la estación con el botón Cambiar estación.";
+  } else notice.hidden = true;
+
+  const btnH = $("btnHoliday");
+  btnH.setAttribute("aria-pressed", holiday ? "true" : "false");
+  btnH.textContent = holiday ? "Feriado activado" : "Hoy es feriado";
+
+  const type = holiday ? "dyf" : dayTypeOfDow(now.dow);
+  const dt = $("dayType"); dt.textContent = "Horario de hoy: ";
+  dt.appendChild(el("b", "", DAY_NAMES[type] + (holiday && now.dow !== 0 ? " (feriado marcado)" : "")));
+
+  renderList("ida", s, now, holiday);
+  renderList("vuelta", s, now, holiday);
+  $("foot").textContent = "Horario N° " + DATA.meta.horario_numero + " de " + DATA.meta.operador + ", vigente desde el " + DATA.meta.vigente_desde.split("-").reverse().join("/") + ". Horarios programados, no en tiempo real. Sitio no oficial.";
+}
+
+function setManual(id){
+  state.manual = id; store.set("bn.manual", id === null ? null : String(id));
+  state.more.ida = state.more.vuelta = false;
+  closeSheet(); render();
+  if (id === null) locate();
+}
+
+function openSheet(){
+  const list = $("sheetList"), r = ranked(), cur = currentStation(); list.textContent = "";
+  const a = el("button", "opt auto" + (state.manual === null ? " sel" : "")); a.type = "button";
+  a.appendChild(el("span", "", "Automático (GPS)")); a.appendChild(el("small", "", r ? "más cercana: " + ST[r[0].id].nombre : ""));
+  a.onclick = () => setManual(null); list.appendChild(a);
+  ST.forEach(e => {
+    const b = el("button", "opt" + (state.manual !== null && e.id === cur ? " sel" : "")); b.type = "button";
+    b.appendChild(el("span", "", e.nombre));
+    if (r) b.appendChild(el("small", "", fmtDist(r.find(x => x.id === e.id).km)));
+    b.onclick = () => setManual(e.id); list.appendChild(b);
+  });
+  $("sheet").classList.add("open");
+}
+function closeSheet(){ $("sheet").classList.remove("open"); }
+
+$("btnStation").onclick = openSheet;
+$("sheetClose").onclick = closeSheet;
+$("sheet").onclick = e => { if (e.target.id === "sheet") closeSheet(); };
+$("btnHoliday").onclick = () => {
+  const today = nowBA().date;
+  state.holidayDate = state.holidayDate === today ? null : today;
+  store.set("bn.feriado", state.holidayDate); render();
+};
+$("moreIda").onclick = () => { state.more.ida = !state.more.ida; render(); };
+$("moreVuelta").onclick = () => { state.more.vuelta = !state.more.vuelta; render(); };
+
+render();
+locate();
+setInterval(render, 15000);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) { render(); locate(); } });
+
+/* Instalación como app en Android (solo cuando se sirve por HTTPS con sw.js al lado) */
+try { if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("sw.js").catch(() => {}); } catch (e) {}
+})().catch(function(){
+  document.getElementById("stName").textContent = "Sin datos";
+  document.getElementById("stSub").textContent = "No se pudieron cargar los horarios. Revisá la conexión y recargá la página.";
+});
+</script>
+</body>
+</html>
