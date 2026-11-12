@@ -33,6 +33,7 @@ header.top h1{font-size:15px;font-weight:700;margin:0;letter-spacing:.02em;text-
 button{font:inherit;color:inherit;cursor:pointer}
 .btn{min-height:48px;border-radius:12px;border:1px solid var(--line);background:var(--bg);font-weight:650;padding:8px 10px}
 .btn[aria-pressed="true"]{background:var(--brand);color:var(--brand-ink);border-color:var(--brand)}
+.actions .wide{grid-column:1/-1}
 .near{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
 .chip{border:1px solid var(--line);background:transparent;border-radius:999px;padding:6px 10px;font-size:13px;min-height:34px}
 .notice{margin-top:10px;padding:9px 11px;border-radius:10px;background:var(--warn-bg);color:var(--warn);font-size:13.5px}
@@ -40,6 +41,8 @@ button{font:inherit;color:inherit;cursor:pointer}
 .daytype b{color:var(--ink)}
 section.dir{margin-top:10px}
 section.dir h3{font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:14px 4px 6px;font-weight:700}
+section.dir h3 b{color:var(--ink)}
+section.dir h3 small{text-transform:none;letter-spacing:0;font-weight:500;font-size:12.5px}
 ul.deps{list-style:none;margin:0;padding:0}
 ul.deps li{display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center;padding:11px 2px;border-top:1px solid var(--line)}
 ul.deps li:first-child{border-top:0}
@@ -63,6 +66,10 @@ footer{margin:18px 4px 0;font-size:12px;color:var(--muted)}
 .opt{display:flex;justify-content:space-between;align-items:center;width:100%;text-align:left;border:0;background:transparent;padding:12px 10px;border-radius:10px;min-height:48px;font-size:16px}
 .opt.sel{background:var(--soft);color:var(--brand);font-weight:700}
 .opt small{color:var(--muted);font-size:13px;font-weight:500}
+.opt.dis{opacity:.38}
+.opt .mark{color:var(--brand);font-size:15px;font-weight:700}
+.group{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);padding:10px 10px 4px}
+.hint{font-size:13.5px;color:var(--muted);padding:8px 10px 6px}
 .opt.auto{font-weight:700;border-bottom:1px solid var(--line);border-radius:10px 10px 0 0;margin-bottom:4px}
 </style>
 </head>
@@ -79,20 +86,20 @@ footer{margin:18px 4px 0;font-size:12px;color:var(--muted)}
     <div class="actions">
       <button class="btn" id="btnStation" type="button">Cambiar estación</button>
       <button class="btn" id="btnHoliday" type="button" aria-pressed="false">Hoy es feriado</button>
+      <button class="btn wide" id="btnFavs" type="button">Estaciones favoritas</button>
     </div>
   </div>
 
   <div class="daytype" id="dayType"></div>
 
-  <section class="dir"><h3 id="hIda">Hacia Villa Rosa</h3><div class="card"><ul class="deps" id="listIda"></ul><button class="more" id="moreIda" type="button"></button></div></section>
-  <section class="dir"><h3 id="hVuelta">Hacia Retiro</h3><div class="card"><ul class="deps" id="listVuelta"></ul><button class="more" id="moreVuelta" type="button"></button></div></section>
+  <div id="sections"></div>
 
   <footer id="foot"></footer>
 </main>
 
 <div id="sheet" role="dialog" aria-modal="true" aria-label="Elegir estación">
   <div class="panel">
-    <div class="head"><strong>Elegir estación</strong><button class="close" id="sheetClose" type="button">Cerrar</button></div>
+    <div class="head"><strong id="sheetTitle">Elegir estación</strong><button class="close" id="sheetClose" type="button">Cerrar</button></div>
     <div class="list" id="sheetList"></div>
   </div>
 </div>
@@ -147,6 +154,26 @@ function departures(s, dir, now, holidayToday, limit){
   return out.slice(0, limit);
 }
 
+/* Próximas salidas desde la estación s que también paran en la estación dst.
+   Devuelve la hora de salida, la de llegada a dst y la duración del viaje. */
+function departuresTo(s, dst, now, holidayToday, limit){
+  const dir = dst > s ? "ida" : "vuelta";
+  const ps = dir === "ida" ? s : LAST - s, pd = dir === "ida" ? dst : LAST - dst, out = [];
+  for (const off of [-1, 0, 1]) {
+    const dow = (now.dow + off + 7) % 7;
+    const type = (off === 0 && holidayToday) ? "dyf" : dayTypeOfDow(dow);
+    for (const t of DATA.servicios[type][dir]) {
+      const i = ps - t.desde, j = pd - t.desde;
+      if (i < 0 || j >= t.m.length) continue;               // no para en alguna de las dos
+      const abs = t.m[i] + off * 1440;
+      if (abs < now.minutes - 0.5) continue;
+      out.push({ abs, hhmm: t.horarios[i], tren: t.tren, arr: t.horarios[j], dur: t.m[j] - t.m[i], tomorrow: abs >= 1440 });
+    }
+  }
+  out.sort((a, b) => a.abs - b.abs);
+  return out.slice(0, limit);
+}
+
 /* === geolocalización === */
 function distKm(a, b, c, d){
   const R = 6371, r = Math.PI / 180, x = (c - a) * r, y = (d - b) * r;
@@ -161,8 +188,14 @@ const state = {
   geoError: null,
   locating: false,
   holidayDate: store.get("bn.feriado"),
-  more: { ida: false, vuelta: false }
+  favs: [],              // hasta MAX_FAVS ids de estaciones favoritas
+  more: {}               // secciones expandidas, por clave
 };
+const MAX_FAVS = 3;
+try {
+  const f = JSON.parse(store.get("bn.favoritas") || "[]");
+  if (Array.isArray(f)) state.favs = f.filter(x => Number.isInteger(x) && ST[x]).slice(0, MAX_FAVS);
+} catch (e) {}
 { const m = store.get("bn.manual"); if (m !== null && ST[+m]) state.manual = +m; }
 const lastAuto = store.get("bn.ultima");
 
@@ -203,25 +236,48 @@ function etaText(mins){
   return "en " + Math.floor(m / 60) + " h " + (m % 60) + " min";
 }
 
-function renderList(dir, s, now, holiday){
-  const ul = $(dir === "ida" ? "listIda" : "listVuelta"), more = $(dir === "ida" ? "moreIda" : "moreVuelta");
-  ul.textContent = "";
-  const terminal = (dir === "ida" && s === LAST) || (dir === "vuelta" && s === 0);
-  if (terminal) { ul.appendChild(el("li", "empty", "Esta estación es la terminal de este sentido.")); more.hidden = true; return; }
-  const n = state.more[dir] ? 15 : 4, deps = departures(s, dir, now, holiday, n);
-  if (!deps.length) { ul.appendChild(el("li", "empty", "No hay más salidas programadas.")); more.hidden = true; return; }
-  deps.forEach((d, k) => {
-    const li = el("li", k === 0 ? "first" : "");
-    li.appendChild(el("div", "time", d.hhmm));
-    const mid = el("div");
-    mid.appendChild(el("div", "dest", "a " + d.dest));
-    mid.appendChild(el("div", "meta", "Tren " + d.tren + " · llega " + d.arr + (d.tomorrow ? " · mañana" : "")));
-    li.appendChild(mid);
-    const mins = d.abs - now.minutes;
-    li.appendChild(el("div", "eta" + (mins >= 60 ? " far" : ""), etaText(mins)));
-    ul.appendChild(li);
-  });
-  more.hidden = false; more.textContent = state.more[dir] ? "Ver menos" : "Ver más salidas";
+/* Secciones a mostrar: una por estación favorita (salvo la actual).
+   Sin favoritas disponibles, una por sentido con destino a las terminales. */
+function sectionsFor(s){
+  const favs = state.favs.filter(f => f !== s);
+  if (favs.length) return favs.map(f => ({ key: "f" + f, pre: "A ", name: ST[f].nombre, sub: f > s ? "sentido Villa Rosa" : "sentido Retiro", target: f }));
+  const out = [];
+  if (s !== LAST) out.push({ key: "ida", pre: "Hacia ", name: "Villa Rosa", dir: "ida" });
+  if (s !== 0) out.push({ key: "vuelta", pre: "Hacia ", name: "Retiro", dir: "vuelta" });
+  return out;
+}
+
+function renderSections(s, now, holiday){
+  const box = $("sections"); box.textContent = "";
+  for (const sec of sectionsFor(s)) {
+    const wrap = el("section", "dir"), h = el("h3", "", sec.pre);
+    h.appendChild(el("b", "", sec.name));
+    if (sec.sub) { h.appendChild(document.createTextNode(" ")); h.appendChild(el("small", "", "(" + sec.sub + ")")); }
+    wrap.appendChild(h);
+    const card = el("div", "card"), ul = el("ul", "deps"); card.appendChild(ul); wrap.appendChild(card); box.appendChild(wrap);
+    const n = state.more[sec.key] ? 15 : 4;
+    const deps = sec.target !== undefined ? departuresTo(s, sec.target, now, holiday, n) : departures(s, sec.dir, now, holiday, n);
+    if (!deps.length) { ul.appendChild(el("li", "empty", "No hay más salidas programadas.")); continue; }
+    deps.forEach((d, k) => {
+      const li = el("li", k === 0 ? "first" : "");
+      li.appendChild(el("div", "time", d.hhmm));
+      const mid = el("div");
+      if (sec.target !== undefined) {
+        mid.appendChild(el("div", "dest", "llega " + d.arr));
+        mid.appendChild(el("div", "meta", Math.round(d.dur) + " min de viaje · Tren " + d.tren + (d.tomorrow ? " · mañana" : "")));
+      } else {
+        mid.appendChild(el("div", "dest", "a " + d.dest));
+        mid.appendChild(el("div", "meta", "Tren " + d.tren + " · llega " + d.arr + (d.tomorrow ? " · mañana" : "")));
+      }
+      li.appendChild(mid);
+      const mins = d.abs - now.minutes;
+      li.appendChild(el("div", "eta" + (mins >= 60 ? " far" : ""), etaText(mins)));
+      ul.appendChild(li);
+    });
+    const more = el("button", "more", state.more[sec.key] ? "Ver menos" : "Ver más salidas"); more.type = "button";
+    more.onclick = () => { state.more[sec.key] = !state.more[sec.key]; render(); };
+    card.appendChild(more);
+  }
 }
 
 function render(){
@@ -263,34 +319,66 @@ function render(){
   const dt = $("dayType"); dt.textContent = "Horario de hoy: ";
   dt.appendChild(el("b", "", DAY_NAMES[type] + (holiday && now.dow !== 0 ? " (feriado marcado)" : "")));
 
-  renderList("ida", s, now, holiday);
-  renderList("vuelta", s, now, holiday);
+  $("btnFavs").textContent = state.favs.length ? "Estaciones favoritas (" + state.favs.length + " de " + MAX_FAVS + ")" : "Elegir estaciones favoritas";
+  renderSections(s, now, holiday);
   $("foot").textContent = "Horario N° " + DATA.meta.horario_numero + " de " + DATA.meta.operador + ", vigente desde el " + DATA.meta.vigente_desde.split("-").reverse().join("/") + ". Horarios programados, no en tiempo real. Sitio no oficial.";
 }
 
 function setManual(id){
   state.manual = id; store.set("bn.manual", id === null ? null : String(id));
-  state.more.ida = state.more.vuelta = false;
+  state.more = {};
   closeSheet(); render();
   if (id === null) locate();
 }
 
 function openSheet(){
   const list = $("sheetList"), r = ranked(), cur = currentStation(); list.textContent = "";
+  $("sheetTitle").textContent = "Elegir estación"; $("sheetClose").textContent = "Cerrar";
   const a = el("button", "opt auto" + (state.manual === null ? " sel" : "")); a.type = "button";
   a.appendChild(el("span", "", "Automático (GPS)")); a.appendChild(el("small", "", r ? "más cercana: " + ST[r[0].id].nombre : ""));
   a.onclick = () => setManual(null); list.appendChild(a);
-  ST.forEach(e => {
+  const add = e => {
     const b = el("button", "opt" + (state.manual !== null && e.id === cur ? " sel" : "")); b.type = "button";
     b.appendChild(el("span", "", e.nombre));
     if (r) b.appendChild(el("small", "", fmtDist(r.find(x => x.id === e.id).km)));
     b.onclick = () => setManual(e.id); list.appendChild(b);
+  };
+  if (state.favs.length) {
+    list.appendChild(el("div", "group", "Favoritas"));
+    state.favs.forEach(f => add(ST[f]));
+    list.appendChild(el("div", "group", "Todas las estaciones"));
+  }
+  ST.forEach(add);
+  $("sheet").classList.add("open");
+}
+
+/* Editor de favoritas: tocar una estación la agrega o la quita, hasta MAX_FAVS */
+function openFavs(){
+  const list = $("sheetList"); list.textContent = "";
+  $("sheetTitle").textContent = "Estaciones favoritas"; $("sheetClose").textContent = "Listo";
+  list.appendChild(el("div", "hint", "Elegí hasta " + MAX_FAVS + ". Se muestran las salidas y la hora de llegada a cada una. Elegidas: " + state.favs.length + " de " + MAX_FAVS + "."));
+  const full = state.favs.length >= MAX_FAVS;
+  ST.forEach(e => {
+    const on = state.favs.includes(e.id), b = el("button", "opt" + (on ? " sel" : full ? " dis" : "")); b.type = "button";
+    b.setAttribute("aria-pressed", on ? "true" : "false");
+    b.appendChild(el("span", "", e.nombre));
+    b.appendChild(el("span", "mark", on ? "★ Quitar" : full ? "" : "Agregar"));
+    b.onclick = () => {
+      if (on) state.favs = state.favs.filter(x => x !== e.id);
+      else if (!full) state.favs = state.favs.concat(e.id);
+      else return;
+      store.set("bn.favoritas", JSON.stringify(state.favs));
+      state.more = {};
+      const top = list.scrollTop; openFavs(); list.scrollTop = top; render();
+    };
+    list.appendChild(b);
   });
   $("sheet").classList.add("open");
 }
 function closeSheet(){ $("sheet").classList.remove("open"); }
 
 $("btnStation").onclick = openSheet;
+$("btnFavs").onclick = openFavs;
 $("sheetClose").onclick = closeSheet;
 $("sheet").onclick = e => { if (e.target.id === "sheet") closeSheet(); };
 $("btnHoliday").onclick = () => {
@@ -298,9 +386,6 @@ $("btnHoliday").onclick = () => {
   state.holidayDate = state.holidayDate === today ? null : today;
   store.set("bn.feriado", state.holidayDate); render();
 };
-$("moreIda").onclick = () => { state.more.ida = !state.more.ida; render(); };
-$("moreVuelta").onclick = () => { state.more.vuelta = !state.more.vuelta; render(); };
-
 render();
 locate();
 setInterval(render, 15000);
