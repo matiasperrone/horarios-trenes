@@ -34,6 +34,8 @@ button{font:inherit;color:inherit;cursor:pointer}
 .btn{min-height:48px;border-radius:12px;border:1px solid var(--line);background:var(--bg);font-weight:650;padding:8px 10px}
 .btn[aria-pressed="true"]{background:var(--brand);color:var(--brand-ink);border-color:var(--brand)}
 .actions .wide{grid-column:1/-1}
+.btn.primary{background:var(--brand);color:var(--brand-ink);border-color:var(--brand)}
+.btn[hidden]{display:none}
 .near{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
 .chip{border:1px solid var(--line);background:transparent;border-radius:999px;padding:6px 10px;font-size:13px;min-height:34px}
 .notice{margin-top:10px;padding:9px 11px;border-radius:10px;background:var(--warn-bg);color:var(--warn);font-size:13.5px}
@@ -87,6 +89,7 @@ footer{margin:18px 4px 0;font-size:12px;color:var(--muted)}
       <button class="btn" id="btnStation" type="button">Cambiar estación</button>
       <button class="btn" id="btnHoliday" type="button" aria-pressed="false">Hoy es feriado</button>
       <button class="btn wide" id="btnFavs" type="button">Estaciones favoritas</button>
+      <button class="btn wide primary" id="btnInstall" type="button" hidden>Instalar app</button>
     </div>
   </div>
 
@@ -106,6 +109,21 @@ footer{margin:18px 4px 0;font-size:12px;color:var(--muted)}
 
 <script>
 "use strict";
+/* === instalación como app ===
+   El navegador avisa con beforeinstallprompt cuando la app se puede instalar (Chrome y Edge).
+   Se guarda el aviso y se muestra el botón; al tocarlo se abre el diálogo de instalación.
+   Si la app ya está instalada, o el navegador no ofrece instalación, el botón queda oculto. */
+(function(){
+  const btn = document.getElementById("btnInstall");
+  let aviso = null;
+  window.addEventListener("beforeinstallprompt", function(e){ e.preventDefault(); aviso = e; btn.hidden = false; });
+  window.addEventListener("appinstalled", function(){ aviso = null; btn.hidden = true; });
+  btn.onclick = async function(){
+    if (!aviso) return;
+    const e = aviso; aviso = null; btn.hidden = true;   // cada aviso sirve una sola vez
+    try { await e.prompt(); await e.userChoice; } catch (err) {}
+  };
+})();
 (async function main(){
 /* Los horarios y las estaciones viven en horarios.json, la única fuente de datos */
 const DATA = await (await fetch("horarios.json")).json();
