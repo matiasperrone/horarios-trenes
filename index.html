@@ -42,7 +42,9 @@ button{font:inherit;color:inherit;cursor:pointer}
 .daytype{margin:14px 4px 4px;font-size:13.5px;color:var(--muted)}
 .daytype b{color:var(--ink)}
 section.dir{margin-top:10px}
-section.dir h3{font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:14px 4px 6px;font-weight:700}
+section.dir h3{display:flex;align-items:center;gap:8px;font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:14px 4px 6px;font-weight:700}
+section.dir h3 .ttl{flex:1;min-width:0}
+.hbtn{flex:none;border:1px solid var(--line);background:var(--card);color:var(--brand);border-radius:999px;padding:4px 12px;min-height:32px;font-size:13px;font-weight:650;text-transform:none;letter-spacing:0}
 section.dir h3 b{color:var(--ink)}
 section.dir h3 small{text-transform:none;letter-spacing:0;font-weight:500;font-size:12.5px}
 ul.deps{list-style:none;margin:0;padding:0}
@@ -210,6 +212,18 @@ const state = {
   more: {}               // secciones expandidas, por clave
 };
 const MAX_FAVS = 3;
+/* Cabecera destino elegida por sentido (id de estación), o null para todos los trenes */
+state.dest = { ida: null, vuelta: null };
+try {
+  const d = JSON.parse(store.get("bn.destino") || "{}");
+  for (const k of ["ida", "vuelta"]) if (Number.isInteger(d[k]) && ST[d[k]]) state.dest[k] = d[k];
+} catch (e) {}
+/* Cabeceras: estaciones donde termina al menos un tren, por sentido y en orden de marcha */
+const CABECERAS = { ida: new Set(), vuelta: new Set() };
+for (const day in DATA.servicios) for (const dir of ["ida", "vuelta"]) for (const t of DATA.servicios[day][dir]) {
+  const end = t.desde + t.horarios.length - 1;
+  CABECERAS[dir].add(dir === "ida" ? end : LAST - end);
+}
 try {
   const f = JSON.parse(store.get("bn.favoritas") || "[]");
   if (Array.isArray(f)) state.favs = f.filter(x => Number.isInteger(x) && ST[x]).slice(0, MAX_FAVS);
@@ -260,17 +274,29 @@ function sectionsFor(s){
   const favs = state.favs.filter(f => f !== s);
   if (favs.length) return favs.map(f => ({ key: "f" + f, pre: "A ", name: ST[f].nombre, sub: f > s ? "sentido Villa Rosa" : "sentido Retiro", target: f }));
   const out = [];
-  if (s !== LAST) out.push({ key: "ida", pre: "Hacia ", name: "Villa Rosa", dir: "ida" });
-  if (s !== 0) out.push({ key: "vuelta", pre: "Hacia ", name: "Retiro", dir: "vuelta" });
+  for (const dir of ["ida", "vuelta"]) {
+    if ((dir === "ida" && s === LAST) || (dir === "vuelta" && s === 0)) continue;
+    const d = state.dest[dir], valid = d !== null && (dir === "ida" ? d > s : d < s);
+    const terminal = dir === "ida" ? "Villa Rosa" : "Retiro";
+    if (valid) out.push({ key: dir + d, pre: "A ", name: ST[d].nombre, sub: "sentido " + terminal, target: d, dir, editable: true });
+    else out.push({ key: dir, pre: "Hacia ", name: terminal, dir, editable: true });
+  }
   return out;
 }
 
 function renderSections(s, now, holiday){
   const box = $("sections"); box.textContent = "";
   for (const sec of sectionsFor(s)) {
-    const wrap = el("section", "dir"), h = el("h3", "", sec.pre);
-    h.appendChild(el("b", "", sec.name));
-    if (sec.sub) { h.appendChild(document.createTextNode(" ")); h.appendChild(el("small", "", "(" + sec.sub + ")")); }
+    const wrap = el("section", "dir"), h = el("h3"), ttl = el("span", "ttl", sec.pre);
+    ttl.appendChild(el("b", "", sec.name));
+    if (sec.sub) { ttl.appendChild(document.createTextNode(" ")); ttl.appendChild(el("small", "", "(" + sec.sub + ")")); }
+    h.appendChild(ttl);
+    if (sec.editable) {
+      const cb = el("button", "hbtn", "Cambiar destino"); cb.type = "button";
+      cb.setAttribute("aria-label", "Cambiar la cabecera destino del sentido " + (sec.dir === "ida" ? "Villa Rosa" : "Retiro"));
+      cb.onclick = () => openDest(sec.dir, s);
+      h.appendChild(cb);
+    }
     wrap.appendChild(h);
     const card = el("div", "card"), ul = el("ul", "deps"); card.appendChild(ul); wrap.appendChild(card); box.appendChild(wrap);
     const n = state.more[sec.key] ? 15 : 4;
@@ -393,6 +419,38 @@ function openFavs(){
   });
   $("sheet").classList.add("open");
 }
+/* Selector de cabecera destino para un sentido, desde la estación s */
+function openDest(dir, s){
+  const list = $("sheetList"); list.textContent = "";
+  const terminal = dir === "ida" ? "Villa Rosa" : "Retiro";
+  $("sheetTitle").textContent = "Destino sentido " + terminal; $("sheetClose").textContent = "Cerrar";
+  const ahead = ST.filter(e => dir === "ida" ? e.id > s : e.id < s);
+  if (dir === "vuelta") ahead.reverse();                         // orden de marcha
+  const cur = state.dest[dir], curValid = ahead.some(e => e.id === cur);
+  const pick = id => {
+    state.dest[dir] = id; store.set("bn.destino", JSON.stringify(state.dest));
+    state.more = {}; closeSheet(); render();
+  };
+  const opt = (label, note, id, sel) => {
+    const b = el("button", "opt" + (sel ? " sel" : "")); b.type = "button";
+    b.appendChild(el("span", "", label)); if (note) b.appendChild(el("small", "", note));
+    b.onclick = () => pick(id); list.appendChild(b);
+  };
+  const all = el("button", "opt auto" + (!curValid ? " sel" : "")); all.type = "button";
+  all.appendChild(el("span", "", "Todos los trenes")); all.appendChild(el("small", "", "cualquier cabecera"));
+  all.onclick = () => pick(null); list.appendChild(all);
+  const cabs = ahead.filter(e => CABECERAS[dir].has(e.id)), rest = ahead.filter(e => !CABECERAS[dir].has(e.id));
+  if (cabs.length) {
+    list.appendChild(el("div", "group", "Cabeceras"));
+    cabs.forEach(e => opt(e.nombre, "terminal de servicios", e.id, curValid && e.id === cur));
+  }
+  if (rest.length) {
+    list.appendChild(el("div", "group", "Otras estaciones"));
+    rest.forEach(e => opt(e.nombre, "", e.id, curValid && e.id === cur));
+  }
+  $("sheet").classList.add("open");
+}
+
 function closeSheet(){ $("sheet").classList.remove("open"); }
 
 $("btnStation").onclick = openSheet;

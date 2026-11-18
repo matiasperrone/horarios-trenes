@@ -12,6 +12,7 @@ Web app que muestra las próximas salidas del tren Belgrano Norte (Ferrovías, R
 - Muestra las próximas salidas en ambos sentidos, con destino, número de tren, hora de llegada y cuenta regresiva.
 - Botón **Cambiar estación** para elegir otra a mano, o volver al modo automático.
 - Botón **Estaciones favoritas** para elegir hasta 3 destinos habituales. Con favoritas elegidas, la app muestra las salidas que llegan a cada una, con la hora de llegada y la duración del viaje, en lugar de los destinos terminales. Se pueden cambiar en cualquier momento y quedan guardadas en el dispositivo.
+- Botón **Cambiar destino** en cada sentido para elegir la cabecera (por ejemplo Grand Bourg o Boulogne Sur Mer en lugar de Villa Rosa o Retiro) u otra estación como destino. Muestra solo los trenes que llegan ahí, con hora de llegada y duración del viaje. La elección queda guardada en el dispositivo.
 - Botón **Hoy es feriado** para aplicar el horario de domingos y feriados durante el día actual.
 - Botón **Instalar app**, visible cuando el navegador permite instalarla (Chrome y Edge), para agregarla a la pantalla principal sin pasar por el menú.
 - Usa siempre la hora de Buenos Aires y contempla los trenes que cruzan la medianoche.
