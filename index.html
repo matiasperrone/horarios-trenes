@@ -467,6 +467,10 @@ function openSheet(){
   $("sheet").classList.add("open");
 }
 
+/* Orden alfabético en español (ignora tildes y mayúsculas) */
+const COLL = new Intl.Collator("es", { sensitivity: "base" });
+const byName = (a, b) => COLL.compare(a.nombre, b.nombre);
+
 /* Editor de trayectos favoritos: quitar existentes y agregar nuevos en dos pasos */
 function openTrips(first){
   const list = $("sheetList"); list.textContent = "";
@@ -484,7 +488,7 @@ function openTrips(first){
     if (state.trips.length >= MAX_TRIPS) { list.appendChild(el("div", "hint", "Llegaste al máximo. Quitá uno para agregar otro.")); }
     else {
       list.appendChild(el("div", "group", "Agregar trayecto: elegí la primera estación"));
-      ST.forEach(e => {
+      ST.slice().sort(byName).forEach(e => {
         const b = el("button", "opt"); b.type = "button";
         b.appendChild(el("span", "", e.nombre)); b.appendChild(el("span", "mark", "Elegir"));
         b.onclick = () => { openTrips(e.id); list.scrollTop = 0; };
@@ -496,12 +500,18 @@ function openTrips(first){
     back.appendChild(el("span", "", "← Cancelar")); back.appendChild(el("small", "", "primera: " + ST[first].nombre));
     back.onclick = () => { openTrips(); list.scrollTop = 0; };
     list.appendChild(back);
-    list.appendChild(el("div", "group", "Elegí la segunda estación"));
-    ST.filter(e => e.id !== first).forEach(e => {
-      const dup = tripIndex(first, e.id) >= 0, b = el("button", "opt" + (dup ? " dis" : "")); b.type = "button";
-      b.appendChild(el("span", "", e.nombre)); b.appendChild(el("small", "", dup ? "ya es favorito" : sentido(first, e.id)));
-      b.onclick = () => { if (dup) return; state.trips.push([first, e.id]); saveTrips(); openTrips(); list.scrollTop = 0; render(); };
-      list.appendChild(b);
+    list.appendChild(el("div", "hint", "Elegí la segunda estación. Están agrupadas por sentido y ordenadas por nombre."));
+    /* Agrupadas por sentido (hacia la cabecera) y, dentro de cada sentido, por nombre */
+    [["Hacia Retiro", e => e.id < first], ["Hacia Villa Rosa", e => e.id > first]].forEach(([titulo, enSentido]) => {
+      const grupo = ST.filter(enSentido).sort(byName);
+      if (!grupo.length) return;                                   // desde una terminal hay un solo sentido
+      list.appendChild(el("div", "group", titulo));
+      grupo.forEach(e => {
+        const dup = tripIndex(first, e.id) >= 0, b = el("button", "opt" + (dup ? " dis" : "")); b.type = "button";
+        b.appendChild(el("span", "", e.nombre)); if (dup) b.appendChild(el("small", "", "ya es favorito"));
+        b.onclick = () => { if (dup) return; state.trips.push([first, e.id]); saveTrips(); openTrips(); list.scrollTop = 0; render(); };
+        list.appendChild(b);
+      });
     });
   }
   $("sheet").classList.add("open");
