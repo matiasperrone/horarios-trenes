@@ -496,12 +496,17 @@ function openTrips(first){
     back.appendChild(el("span", "", "← Cancelar")); back.appendChild(el("small", "", "primera: " + ST[first].nombre));
     back.onclick = () => { openTrips(); list.scrollTop = 0; };
     list.appendChild(back);
-    list.appendChild(el("div", "group", "Elegí la segunda estación"));
-    ST.filter(e => e.id !== first).forEach(e => {
-      const dup = tripIndex(first, e.id) >= 0, b = el("button", "opt" + (dup ? " dis" : "")); b.type = "button";
-      b.appendChild(el("span", "", e.nombre)); b.appendChild(el("small", "", dup ? "ya es favorito" : sentido(first, e.id)));
-      b.onclick = () => { if (dup) return; state.trips.push([first, e.id]); saveTrips(); openTrips(); list.scrollTop = 0; render(); };
-      list.appendChild(b);
+    list.appendChild(el("div", "hint", "Elegí la segunda estación."));
+    /* Agrupadas por sentido, cada grupo en orden de recorrido desde la primera estación */
+    [["Sentido Retiro", ST.filter(e => e.id < first).reverse()], ["Sentido Villa Rosa", ST.filter(e => e.id > first)]].forEach(([titulo, grupo]) => {
+      if (!grupo.length) return;                                   // desde una terminal hay un solo sentido
+      list.appendChild(el("div", "group", titulo));
+      grupo.forEach(e => {
+        const dup = tripIndex(first, e.id) >= 0, b = el("button", "opt" + (dup ? " dis" : "")); b.type = "button";
+        b.appendChild(el("span", "", e.nombre)); b.appendChild(el("span", "mark", dup ? "Ya es favorito" : "Elegir"));
+        b.onclick = () => { if (dup) return; state.trips.push([first, e.id]); saveTrips(); openTrips(); list.scrollTop = 0; render(); };
+        list.appendChild(b);
+      });
     });
   }
   $("sheet").classList.add("open");
