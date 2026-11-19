@@ -8,11 +8,11 @@ Web app que muestra las próximas salidas del tren Belgrano Norte (Ferrovías, R
 
 ## Qué hace
 
-- Elige la estación más cercana usando el GPS del dispositivo.
-- Muestra las próximas salidas en ambos sentidos, con destino, número de tren, hora de llegada y cuenta regresiva.
-- Botón **Cambiar estación** para elegir otra a mano, o volver al modo automático.
-- Botón **Estaciones favoritas** para elegir hasta 3 destinos habituales. Con favoritas elegidas, la app muestra las salidas que llegan a cada una, con la hora de llegada y la duración del viaje, en lugar de los destinos terminales. Se pueden cambiar en cualquier momento y quedan guardadas en el dispositivo.
-- Botón **Cambiar destino** en cada sentido para elegir la cabecera (por ejemplo Grand Bourg o Boulogne Sur Mer en lugar de Villa Rosa o Retiro) u otra estación como destino. Muestra solo los trenes que llegan ahí, con hora de llegada y duración del viaje. La elección queda guardada en el dispositivo.
+- Elige como origen la estación más cercana usando el GPS del dispositivo. **Cambiar origen** permite elegir otra a mano o volver al modo automático.
+- Tarjeta **Origen → Destino**: el destino puede ser automático, todos los trenes, una cabecera (Villa Rosa, Grand Bourg, Boulogne Sur Mer, Retiro) o cualquier estación. El botón ⇄ invierte el trayecto. Origen y destino nunca coinciden.
+- **Trayectos favoritos** (hasta 3, con ☆ o desde su botón). Cada trayecto vale en los dos sentidos: si estás en uno de sus extremos, la app lo muestra automáticamente desde ahí (por ejemplo Munro → Villa Adelina, o al revés).
+- Con destino elegido, las salidas muestran hora de llegada y duración del viaje. Con "todos los trenes", una sección por sentido, cada una con **Cambiar destino** para elegir su cabecera.
+- **Ajustes** para elegir la vista: completa (trayecto activo y los demás favoritos, con su próxima salida) o simple (solo el trayecto activo).
 - Botón **Hoy es feriado** para aplicar el horario de domingos y feriados durante el día actual.
 - Botón **Instalar app**, visible cuando el navegador permite instalarla (Chrome y Edge), para agregarla a la pantalla principal sin pasar por el menú.
 - Usa siempre la hora de Buenos Aires y contempla los trenes que cruzan la medianoche.
