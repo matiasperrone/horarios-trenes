@@ -21,7 +21,7 @@ html,body{margin:0}
 body{background:var(--bg);color:var(--ink);font:16px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
   -webkit-tap-highlight-color:transparent}
 main{max-width:560px;margin:0 auto;padding:14px 14px 40px}
-header.top{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin:2px 2px 10px}
+header.top{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:2px 2px 10px}
 header.top h1{font-size:15px;font-weight:700;margin:0;letter-spacing:.02em;text-transform:uppercase;color:var(--brand)}
 #clock{font-variant-numeric:tabular-nums;font-weight:600;color:var(--muted);font-size:15px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px}
@@ -34,6 +34,19 @@ button{font:inherit;color:inherit;cursor:pointer}
 .btn{min-height:48px;border-radius:12px;border:1px solid var(--line);background:var(--bg);font-weight:650;padding:8px 10px}
 .btn[aria-pressed="true"]{background:var(--brand);color:var(--brand-ink);border-color:var(--brand)}
 .actions .wide{grid-column:1/-1}
+header.top .tr{display:flex;align-items:center;gap:10px}
+.tbtn{border:1px solid var(--line);background:var(--card);border-radius:999px;padding:4px 12px;min-height:34px;font-size:13px;font-weight:650;color:var(--brand)}
+.route{display:flex;gap:8px;margin-top:12px;align-items:stretch}
+.route .dest{flex:1;min-width:0;display:flex;flex-direction:column;align-items:flex-start;gap:1px;text-align:left;border:1px solid var(--line);background:var(--bg);border-radius:12px;padding:8px 12px;min-height:58px}
+.dlabel{font-size:11.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.dname{font-size:18px;font-weight:750;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dnote{font-size:12.5px;color:var(--muted)}
+.icon{flex:none;width:52px;border:1px solid var(--line);background:var(--bg);border-radius:12px;font-size:22px;line-height:1;color:var(--brand)}
+.icon:disabled{opacity:.35;cursor:default}
+.icon[aria-pressed="true"]{background:var(--soft);border-color:var(--brand)}
+ul.deps.trips li{display:block;padding:0}
+.triprow{display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center;width:100%;text-align:left;border:0;background:transparent;padding:11px 2px;min-height:56px}
+.triprow .dest{font-size:15.5px}
 .btn.primary{background:var(--brand);color:var(--brand-ink);border-color:var(--brand)}
 .btn[hidden]{display:none}
 .near{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
@@ -79,18 +92,23 @@ footer{margin:18px 4px 0;font-size:12px;color:var(--muted)}
 </head>
 <body>
 <main>
-  <header class="top"><h1>Belgrano Norte</h1><span id="clock"></span></header>
+  <header class="top"><h1>Belgrano Norte</h1><span class="tr"><span id="clock"></span><button class="tbtn" id="btnSettings" type="button">Ajustes</button></span></header>
 
   <div class="card station">
-    <div class="label" id="modeLabel">Estación</div>
+    <div class="label" id="modeLabel">Origen</div>
     <h2 id="stName">...</h2>
     <div class="sub" id="stSub"></div>
     <div class="near" id="near"></div>
     <div class="notice" id="notice" hidden></div>
+    <div class="route">
+      <button class="dest" id="btnDest" type="button"><span class="dlabel">Destino</span><span class="dname" id="destName">Todos los trenes</span><span class="dnote" id="destNote"></span></button>
+      <button class="icon" id="btnSwap" type="button" aria-label="Invertir origen y destino">⇄</button>
+      <button class="icon" id="btnStar" type="button" aria-label="Guardar trayecto favorito" aria-pressed="false">☆</button>
+    </div>
     <div class="actions">
-      <button class="btn" id="btnStation" type="button">Cambiar estación</button>
+      <button class="btn" id="btnStation" type="button">Cambiar origen</button>
       <button class="btn" id="btnHoliday" type="button" aria-pressed="false">Hoy es feriado</button>
-      <button class="btn wide" id="btnFavs" type="button">Estaciones favoritas</button>
+      <button class="btn wide" id="btnFavs" type="button">Trayectos favoritos</button>
       <button class="btn wide primary" id="btnInstall" type="button" hidden>Instalar app</button>
     </div>
   </div>
@@ -208,10 +226,12 @@ const state = {
   geoError: null,
   locating: false,
   holidayDate: store.get("bn.feriado"),
-  favs: [],              // hasta MAX_FAVS ids de estaciones favoritas
+  trips: [],             // trayectos favoritos: pares [a, b] de ids, válidos en ambos sentidos
+  destSel: "auto",       // destino: "auto" (trayecto favorito desde el origen), "todos" o id de estación
+  view: "completa",      // "completa": trayecto activo y otros favoritos; "simple": solo el activo
   more: {}               // secciones expandidas, por clave
 };
-const MAX_FAVS = 3;
+const MAX_TRIPS = 3;
 /* Cabecera destino elegida por sentido (id de estación), o null para todos los trenes */
 state.dest = { ida: null, vuelta: null };
 try {
@@ -225,9 +245,15 @@ for (const day in DATA.servicios) for (const dir of ["ida", "vuelta"]) for (cons
   CABECERAS[dir].add(dir === "ida" ? end : LAST - end);
 }
 try {
-  const f = JSON.parse(store.get("bn.favoritas") || "[]");
-  if (Array.isArray(f)) state.favs = f.filter(x => Number.isInteger(x) && ST[x]).slice(0, MAX_FAVS);
+  const t = JSON.parse(store.get("bn.trayectos") || "[]");
+  if (Array.isArray(t)) state.trips = t.filter(p => Array.isArray(p) && p.length === 2 && Number.isInteger(p[0]) && Number.isInteger(p[1])
+    && ST[p[0]] && ST[p[1]] && p[0] !== p[1]).slice(0, MAX_TRIPS);
 } catch (e) {}
+{ const d = store.get("bn.destino_sel");
+  if (d === "todos") state.destSel = "todos";
+  else if (d !== null && /^\d+$/.test(d) && ST[+d]) state.destSel = +d; }
+state.view = store.get("bn.vista") === "simple" ? "simple" : "completa";
+store.set("bn.favoritas", null);   // las estaciones favoritas fueron reemplazadas por trayectos
 { const m = store.get("bn.manual"); if (m !== null && ST[+m]) state.manual = +m; }
 const lastAuto = store.get("bn.ultima");
 
@@ -268,20 +294,60 @@ function etaText(mins){
   return "en " + Math.floor(m / 60) + " h " + (m % 60) + " min";
 }
 
-/* Secciones a mostrar: una por estación favorita (salvo la actual).
-   Sin favoritas disponibles, una por sentido con destino a las terminales. */
+/* === trayectos === */
+const sentido = (from, to) => "sentido " + (to > from ? "Villa Rosa" : "Retiro");
+function tripIndex(a, b){ return state.trips.findIndex(p => (p[0] === a && p[1] === b) || (p[0] === b && p[1] === a)); }
+function saveTrips(){ store.set("bn.trayectos", JSON.stringify(state.trips)); }
+function setDestSel(v){ state.destSel = v; store.set("bn.destino_sel", String(v)); state.more = {}; }
+
+/* Destino activo desde el origen s: { id, fav, auto } o null para todos los trenes.
+   Un destino igual al origen nunca se usa: se recurre a un trayecto favorito con extremo en s. */
+function activeDest(s){
+  const sel = state.destSel;
+  if (typeof sel === "number" && sel !== s) return { id: sel, fav: tripIndex(s, sel) >= 0, auto: false };
+  if (sel === "todos") return null;
+  const p = state.trips.find(p => p[0] === s || p[1] === s);
+  return p ? { id: p[0] === s ? p[1] : p[0], fav: true, auto: true } : null;
+}
+
+/* Secciones a mostrar: el trayecto activo, o una por sentido si el destino es "todos los trenes" */
 function sectionsFor(s){
-  const favs = state.favs.filter(f => f !== s);
-  if (favs.length) return favs.map(f => ({ key: "f" + f, pre: "A ", name: ST[f].nombre, sub: f > s ? "sentido Villa Rosa" : "sentido Retiro", target: f }));
+  const d = activeDest(s);
+  if (d) return [{ key: "r" + d.id, pre: "A ", name: ST[d.id].nombre, sub: sentido(s, d.id), target: d.id }];
   const out = [];
   for (const dir of ["ida", "vuelta"]) {
-    if ((dir === "ida" && s === LAST) || (dir === "vuelta" && s === 0)) continue;
-    const d = state.dest[dir], valid = d !== null && (dir === "ida" ? d > s : d < s);
+    if ((dir === "ida" && s === LAST) || (dir === "vuelta" && s === 0)) continue;   // desde una terminal hay un solo sentido
+    const c = state.dest[dir], valid = c !== null && (dir === "ida" ? c > s : c < s);
     const terminal = dir === "ida" ? "Villa Rosa" : "Retiro";
-    if (valid) out.push({ key: dir + d, pre: "A ", name: ST[d].nombre, sub: "sentido " + terminal, target: d, dir, editable: true });
+    if (valid) out.push({ key: dir + c, pre: "A ", name: ST[c].nombre, sub: "sentido " + terminal, target: c, dir, editable: true });
     else out.push({ key: dir, pre: "Hacia ", name: terminal, dir, editable: true });
   }
   return out;
+}
+
+/* Otros trayectos favoritos en forma compacta, cada uno desde el extremo más cercano al origen */
+function renderTrips(s, d, now, holiday){
+  const others = state.trips.filter(p => !(d && tripIndex(s, d.id) >= 0 && ((p[0] === s && p[1] === d.id) || (p[1] === s && p[0] === d.id))));
+  if (!others.length) return;
+  const wrap = el("section", "dir"), h = el("h3"), card = el("div", "card"), ul = el("ul", "deps trips");
+  h.appendChild(el("span", "ttl", d ? "Otros trayectos favoritos" : "Trayectos favoritos"));
+  wrap.appendChild(h); card.appendChild(ul); wrap.appendChild(card); $("sections").appendChild(wrap);
+  for (const p of others) {
+    const from = Math.abs(p[1] - s) < Math.abs(p[0] - s) ? p[1] : p[0], to = from === p[0] ? p[1] : p[0];
+    const nx = departuresTo(from, to, now, holiday, 1)[0];
+    const li = el("li"), b = el("button", "triprow"); b.type = "button";
+    const mid = el("div");
+    mid.appendChild(el("div", "dest", ST[from].nombre + " → " + ST[to].nombre));
+    mid.appendChild(el("div", "meta", nx ? "sale " + nx.hhmm + " · llega " + nx.arr + " · " + Math.round(nx.dur) + " min" + (nx.tomorrow ? " · mañana" : "") : "Sin salidas programadas"));
+    b.appendChild(mid);
+    if (nx) { const mins = nx.abs - now.minutes; b.appendChild(el("div", "eta" + (mins >= 60 ? " far" : ""), etaText(mins))); }
+    b.setAttribute("aria-label", "Ver trayecto " + ST[from].nombre + " a " + ST[to].nombre);
+    b.onclick = () => {
+      state.manual = from; store.set("bn.manual", String(from)); setDestSel(to); render();
+      try { window.scrollTo({ top: 0, behavior: "smooth" }); } catch (e) {}
+    };
+    li.appendChild(b); ul.appendChild(li);
+  }
 }
 
 function renderSections(s, now, holiday){
@@ -322,6 +388,7 @@ function renderSections(s, now, holiday){
     more.onclick = () => { state.more[sec.key] = !state.more[sec.key]; render(); };
     card.appendChild(more);
   }
+  if (state.view === "completa") renderTrips(s, activeDest(s), now, holiday);
 }
 
 function render(){
@@ -332,7 +399,7 @@ function render(){
   $("clock").textContent = now.hhmm;
   $("stName").textContent = st.nombre;
   const auto = state.manual === null;
-  $("modeLabel").textContent = auto ? (state.pos ? "Estación más cercana" : "Estación") : "Estación elegida a mano";
+  $("modeLabel").textContent = auto ? (state.pos ? "Origen · estación más cercana" : "Origen") : "Origen elegido a mano";
 
   const sub = $("stSub"); sub.textContent = "";
   sub.appendChild(el("span", "badge", auto ? "GPS" : "Manual"));
@@ -352,7 +419,7 @@ function render(){
   const notice = $("notice");
   if (auto && !state.pos && !state.locating && state.geoError) {
     notice.hidden = false;
-    notice.textContent = state.geoError + " Se muestra " + st.nombre + ". Elegí la estación con el botón Cambiar estación.";
+    notice.textContent = state.geoError + " Se muestra " + st.nombre + ". Elegí el origen con el botón Cambiar origen.";
   } else notice.hidden = true;
 
   const btnH = $("btnHoliday");
@@ -363,7 +430,16 @@ function render(){
   const dt = $("dayType"); dt.textContent = "Horario de hoy: ";
   dt.appendChild(el("b", "", DAY_NAMES[type] + (holiday && now.dow !== 0 ? " (feriado marcado)" : "")));
 
-  $("btnFavs").textContent = state.favs.length ? "Estaciones favoritas (" + state.favs.length + " de " + MAX_FAVS + ")" : "Elegir estaciones favoritas";
+  const d = activeDest(s);
+  $("destName").textContent = d ? ST[d.id].nombre : "Todos los trenes";
+  $("destNote").textContent = d ? sentido(s, d.id) + (d.fav ? " · favorito" + (d.auto ? " automático" : "") : "") : (s === 0 ? "sentido Villa Rosa" : s === LAST ? "sentido Retiro" : "ambos sentidos");
+  $("btnSwap").disabled = !d;
+  const star = $("btnStar"), saved = d && tripIndex(s, d.id) >= 0;
+  star.disabled = !d;
+  star.textContent = saved ? "★" : "☆";
+  star.setAttribute("aria-pressed", saved ? "true" : "false");
+  star.setAttribute("aria-label", saved ? "Quitar trayecto de favoritos" : "Guardar trayecto favorito");
+  $("btnFavs").textContent = state.trips.length ? "Trayectos favoritos (" + state.trips.length + " de " + MAX_TRIPS + ")" : "Agregar trayectos favoritos";
   renderSections(s, now, holiday);
   $("foot").textContent = "Horario N° " + DATA.meta.horario_numero + " de " + DATA.meta.operador + ", vigente desde el " + DATA.meta.vigente_desde.split("-").reverse().join("/") + ". Horarios programados, no en tiempo real. Sitio no oficial.";
 }
@@ -376,8 +452,8 @@ function setManual(id){
 }
 
 function openSheet(){
-  const list = $("sheetList"), r = ranked(), cur = currentStation(); list.textContent = "";
-  $("sheetTitle").textContent = "Elegir estación"; $("sheetClose").textContent = "Cerrar";
+  const list = $("sheetList"), r = ranked(), cur = currentStation(), d = activeDest(cur); list.textContent = "";
+  $("sheetTitle").textContent = "Elegir origen"; $("sheetClose").textContent = "Cerrar";
   const a = el("button", "opt auto" + (state.manual === null ? " sel" : "")); a.type = "button";
   a.appendChild(el("span", "", "Automático (GPS)")); a.appendChild(el("small", "", r ? "más cercana: " + ST[r[0].id].nombre : ""));
   a.onclick = () => setManual(null); list.appendChild(a);
@@ -387,38 +463,93 @@ function openSheet(){
     if (r) b.appendChild(el("small", "", fmtDist(r.find(x => x.id === e.id).km)));
     b.onclick = () => setManual(e.id); list.appendChild(b);
   };
-  if (state.favs.length) {
-    list.appendChild(el("div", "group", "Favoritas"));
-    state.favs.forEach(f => add(ST[f]));
-    list.appendChild(el("div", "group", "Todas las estaciones"));
-  }
-  ST.forEach(add);
+  ST.filter(e => !(d && !d.auto && e.id === d.id)).forEach(add);   // origen y destino nunca coinciden
   $("sheet").classList.add("open");
 }
 
-/* Editor de favoritas: tocar una estación la agrega o la quita, hasta MAX_FAVS */
-function openFavs(){
+/* Editor de trayectos favoritos: quitar existentes y agregar nuevos en dos pasos */
+function openTrips(first){
   const list = $("sheetList"); list.textContent = "";
-  $("sheetTitle").textContent = "Estaciones favoritas"; $("sheetClose").textContent = "Listo";
-  list.appendChild(el("div", "hint", "Elegí hasta " + MAX_FAVS + ". Se muestran las salidas y la hora de llegada a cada una. Elegidas: " + state.favs.length + " de " + MAX_FAVS + "."));
-  const full = state.favs.length >= MAX_FAVS;
-  ST.forEach(e => {
-    const on = state.favs.includes(e.id), b = el("button", "opt" + (on ? " sel" : full ? " dis" : "")); b.type = "button";
-    b.setAttribute("aria-pressed", on ? "true" : "false");
-    b.appendChild(el("span", "", e.nombre));
-    b.appendChild(el("span", "mark", on ? "★ Quitar" : full ? "" : "Agregar"));
-    b.onclick = () => {
-      if (on) state.favs = state.favs.filter(x => x !== e.id);
-      else if (!full) state.favs = state.favs.concat(e.id);
-      else return;
-      store.set("bn.favoritas", JSON.stringify(state.favs));
-      state.more = {};
-      const top = list.scrollTop; openFavs(); list.scrollTop = top; render();
-    };
+  $("sheetTitle").textContent = "Trayectos favoritos"; $("sheetClose").textContent = "Listo";
+  const reopen = f => { const top = list.scrollTop; openTrips(f); list.scrollTop = top; render(); };
+  if (first === undefined) {
+    list.appendChild(el("div", "hint", "Hasta " + MAX_TRIPS + " trayectos. Cada uno vale en los dos sentidos: la app lo muestra desde el extremo donde estés."));
+    state.trips.forEach((p, i) => {
+      const b = el("button", "opt sel"); b.type = "button";
+      b.appendChild(el("span", "", ST[p[0]].nombre + " ⇄ " + ST[p[1]].nombre));
+      b.appendChild(el("span", "mark", "★ Quitar"));
+      b.onclick = () => { state.trips.splice(i, 1); saveTrips(); reopen(); };
+      list.appendChild(b);
+    });
+    if (state.trips.length >= MAX_TRIPS) { list.appendChild(el("div", "hint", "Llegaste al máximo. Quitá uno para agregar otro.")); }
+    else {
+      list.appendChild(el("div", "group", "Agregar trayecto: elegí la primera estación"));
+      ST.forEach(e => {
+        const b = el("button", "opt"); b.type = "button";
+        b.appendChild(el("span", "", e.nombre)); b.appendChild(el("span", "mark", "Elegir"));
+        b.onclick = () => { openTrips(e.id); list.scrollTop = 0; };
+        list.appendChild(b);
+      });
+    }
+  } else {
+    const back = el("button", "opt auto"); back.type = "button";
+    back.appendChild(el("span", "", "← Cancelar")); back.appendChild(el("small", "", "primera: " + ST[first].nombre));
+    back.onclick = () => { openTrips(); list.scrollTop = 0; };
+    list.appendChild(back);
+    list.appendChild(el("div", "group", "Elegí la segunda estación"));
+    ST.filter(e => e.id !== first).forEach(e => {
+      const dup = tripIndex(first, e.id) >= 0, b = el("button", "opt" + (dup ? " dis" : "")); b.type = "button";
+      b.appendChild(el("span", "", e.nombre)); b.appendChild(el("small", "", dup ? "ya es favorito" : sentido(first, e.id)));
+      b.onclick = () => { if (dup) return; state.trips.push([first, e.id]); saveTrips(); openTrips(); list.scrollTop = 0; render(); };
+      list.appendChild(b);
+    });
+  }
+  $("sheet").classList.add("open");
+}
+
+/* Selector de destino del trayecto activo, desde el origen s (nunca ofrece el propio origen) */
+function openDestino(){
+  const s = currentStation(), list = $("sheetList"); list.textContent = "";
+  $("sheetTitle").textContent = "Destino desde " + ST[s].nombre; $("sheetClose").textContent = "Cerrar";
+  const pick = v => { setDestSel(v); closeSheet(); render(); };
+  const opt = (cls, label, note, v, sel) => {
+    const b = el("button", "opt" + cls + (sel ? " sel" : "")); b.type = "button";
+    b.appendChild(el("span", "", label)); if (note) b.appendChild(el("small", "", note));
+    b.onclick = () => pick(v); list.appendChild(b);
+  };
+  const favHere = state.trips.filter(p => p[0] === s || p[1] === s).map(p => p[0] === s ? p[1] : p[0]);
+  const sel = state.destSel, num = typeof sel === "number" && sel !== s;
+  opt(" auto", "Automático", favHere.length ? "favorito: " + ST[favHere[0]].nombre : "favorito desde aquí o todos los trenes", "auto", !num && sel !== "todos");
+  opt("", "Todos los trenes", "ambos sentidos", "todos", sel === "todos");
+  const shown = new Set([s]);
+  if (favHere.length) {
+    list.appendChild(el("div", "group", "Trayectos favoritos desde aquí"));
+    favHere.forEach(id => { shown.add(id); opt("", ST[id].nombre, sentido(s, id), id, num && sel === id); });
+  }
+  const cabs = ST.filter(e => !shown.has(e.id) && (CABECERAS.ida.has(e.id) || CABECERAS.vuelta.has(e.id)));
+  if (cabs.length) {
+    list.appendChild(el("div", "group", "Cabeceras"));
+    cabs.forEach(e => { shown.add(e.id); opt("", e.nombre, sentido(s, e.id), e.id, num && sel === e.id); });
+  }
+  list.appendChild(el("div", "group", "Otras estaciones"));
+  ST.filter(e => !shown.has(e.id)).forEach(e => opt("", e.nombre, sentido(s, e.id), e.id, num && sel === e.id));
+  $("sheet").classList.add("open");
+}
+
+/* Ajustes: forma de la pantalla principal */
+function openSettings(){
+  const list = $("sheetList"); list.textContent = "";
+  $("sheetTitle").textContent = "Ajustes"; $("sheetClose").textContent = "Listo";
+  list.appendChild(el("div", "group", "Vista de la pantalla principal"));
+  [["completa", "Completa", "trayecto activo y los demás favoritos"], ["simple", "Simple", "solo el trayecto activo"]].forEach(([v, label, note]) => {
+    const b = el("button", "opt" + (state.view === v ? " sel" : "")); b.type = "button";
+    b.appendChild(el("span", "", label)); b.appendChild(el("small", "", note));
+    b.onclick = () => { state.view = v; store.set("bn.vista", v); openSettings(); render(); };
     list.appendChild(b);
   });
   $("sheet").classList.add("open");
 }
+
 /* Selector de cabecera destino para un sentido, desde la estación s */
 function openDest(dir, s){
   const list = $("sheetList"); list.textContent = "";
@@ -454,7 +585,21 @@ function openDest(dir, s){
 function closeSheet(){ $("sheet").classList.remove("open"); }
 
 $("btnStation").onclick = openSheet;
-$("btnFavs").onclick = openFavs;
+$("btnFavs").onclick = () => openTrips();
+$("btnDest").onclick = openDestino;
+$("btnSettings").onclick = openSettings;
+$("btnSwap").onclick = () => {
+  const s = currentStation(), d = activeDest(s); if (!d) return;
+  state.manual = d.id; store.set("bn.manual", String(d.id)); setDestSel(s); render();
+};
+$("btnStar").onclick = () => {
+  const s = currentStation(), d = activeDest(s); if (!d) return;
+  const i = tripIndex(s, d.id);
+  if (i >= 0) state.trips.splice(i, 1);
+  else if (state.trips.length < MAX_TRIPS) state.trips.push([s, d.id]);
+  else { openTrips(); return; }                                  // lleno: abrir el editor para quitar uno
+  saveTrips(); render();
+};
 $("sheetClose").onclick = closeSheet;
 $("sheet").onclick = e => { if (e.target.id === "sheet") closeSheet(); };
 $("btnHoliday").onclick = () => {
